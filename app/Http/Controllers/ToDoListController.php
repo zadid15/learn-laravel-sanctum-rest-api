@@ -6,11 +6,13 @@ use App\Http\Resources\ToDoListResource;
 use App\Models\Logging;
 use App\Models\ToDoList;
 use Exception;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ToDoListController extends Controller
 {
+    use AuthorizesRequests;
     /**
      * Display a listing of the resource.
      */
@@ -18,7 +20,7 @@ class ToDoListController extends Controller
     {
         //
         try {
-            $todolists = ToDoList::latest()->get();
+            $todolists = ToDoList::latest()->where('user_id', auth()->user()->id)->get();
 
             return ToDoListResource::collection($todolists);
         } catch (Exception $error) {
@@ -38,6 +40,8 @@ class ToDoListController extends Controller
     public function store(Request $request)
     {
         //
+        $this->authorize('create', ToDoList::class);
+
         $data = $request->validate([
             'title' => 'required|min:3|max:255',
             'description' => 'required|min:3|max:255',
@@ -45,6 +49,7 @@ class ToDoListController extends Controller
         ]);
 
         try {
+            $data['user_id'] = auth()->user()->id;
             $todolist = ToDoList::create($data);
 
             return response()->json([
@@ -69,13 +74,15 @@ class ToDoListController extends Controller
     {
         //
         try {
-            $todolis = ToDoList::find($id);
+            $todolist = ToDoList::find($id);
+
+            $this->authorize('view', $todolist);
 
             return new ToDoListResource($todolist);
         } catch (Exception $error) {
             Log::error('Failed to get specific ToDoList, ' . $error->getMessage());
 
-            Logging::record(auth()->user()->id, request()->fullUrl(), 'Failed to get specific ToDoList, ' . $error->getMessage(), request()->ip());
+            Logging::record(auth()->user(), request()->fullUrl(), 'Failed to get specific ToDoList, ' . $error->getMessage(), request()->ip());
 
             return response()->json([
                 'message' => 'Failed to get specific ToDoList, ' . $error->getMessage()
@@ -89,20 +96,23 @@ class ToDoListController extends Controller
     public function update(Request $request, string $id)
     {
         //
-        try {
-            $todolist = ToDoList::find($id);
-        } catch (Exception $error) {
+        $todolist = ToDoList::find($id);
+
+        if (!$todolist) {
             return response()->json([
                 'message' => 'ToDoList not found'
-            ], 500);
+            ]);
         }
-
+        
+        $this->authorize('update', $todolist);
+        
         $data = $request->validate([
             'title' => 'required|min:3|max:255',
             'description' => 'required|min:3|max:255',
             'is_done' => 'required|boolean'
         ]);
-
+        
+        
         try {
             $todolist->update($data);
 
@@ -127,13 +137,15 @@ class ToDoListController extends Controller
     public function destroy(string $id)
     {
         //
-        try {
-            $todolist = ToDoList::find($id);
-        } catch (\Throwable $th) {
+        $todolist = ToDoList::find($id);
+
+        if (!$todolist) {
             return response()->json([
                 'message' => 'ToDoList not found'
-            ], 500);
+            ]);
         }
+
+        $this->authorize('delete', $todolist);
 
         try {
             $todolist->delete();
