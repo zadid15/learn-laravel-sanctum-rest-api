@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\ToDoListResource;
+use App\Models\Logging;
 use App\Models\ToDoList;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ToDoListController extends Controller
 {
@@ -15,9 +17,19 @@ class ToDoListController extends Controller
     public function index()
     {
         //
-        $todolist = ToDoList::latest()->get();
+        try {
+            $todolists = ToDoList::latest()->get();
 
-        return ToDoListResource::collection($todolist);
+            return ToDoListResource::collection($todolists);
+        } catch (Exception $error) {
+            Log::error('Failed to get ToDoLists, ' . $error->getMessage());
+
+            Logging::record(auth()->user()->id, request()->fullUrl(), 'Failed to get ToDoLists, ' . $error->getMessage(), request()->ip());
+
+            return response()->json([
+                'message' => 'Failed to get ToDoLists, ' . $error->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -40,6 +52,10 @@ class ToDoListController extends Controller
                 'data' => new ToDoListResource($todolist)
             ], 201);
         } catch (Exception $error) {
+            Log::error('Failed to create ToDoList, ' . $error->getMessage());
+
+            Logging::record(auth()->user()->id, request()->fullUrl(), 'Failed to create ToDoList, ' . $error->getMessage(), request()->ip());
+
             return response()->json([
                 'message' => 'Failed to create ToDoList'
             ], 500);
@@ -52,15 +68,19 @@ class ToDoListController extends Controller
     public function show(string $id)
     {
         //
-        $todolist = ToDoList::find($id);
+        try {
+            $todolis = ToDoList::find($id);
 
-        if (!$todolist) {
+            return new ToDoListResource($todolist);
+        } catch (Exception $error) {
+            Log::error('Failed to get specific ToDoList, ' . $error->getMessage());
+
+            Logging::record(auth()->user()->id, request()->fullUrl(), 'Failed to get specific ToDoList, ' . $error->getMessage(), request()->ip());
+
             return response()->json([
-                'message' => 'ToDoList not found'
-            ], 404);
+                'message' => 'Failed to get specific ToDoList, ' . $error->getMessage()
+            ]);
         }
-
-        return new ToDoListResource($todolist);
     }
 
     /**
@@ -69,19 +89,19 @@ class ToDoListController extends Controller
     public function update(Request $request, string $id)
     {
         //
+        try {
+            $todolist = ToDoList::find($id);
+        } catch (Exception $error) {
+            return response()->json([
+                'message' => 'ToDoList not found'
+            ], 500);
+        }
+
         $data = $request->validate([
             'title' => 'required|min:3|max:255',
             'description' => 'required|min:3|max:255',
             'is_done' => 'required|boolean'
         ]);
-
-        $todolist = ToDoList::find($id);
-
-        if (!$todolist) {
-            return response()->json([
-                'message' => 'ToDoList not found'
-            ], 404);
-        }
 
         try {
             $todolist->update($data);
@@ -91,8 +111,12 @@ class ToDoListController extends Controller
                 'data' => new ToDoListResource($todolist)
             ], 200);
         } catch (Exception $error) {
+            Log::error('Failed to update ToDoList, ' . $error->getMessage());
+
+            Logging::record(auth()->user()->id, request()->fullUrl(), 'Failed to update ToDoList, ' . $error->getMessage(), request()->ip());
+
             return response()->json([
-                'message' => 'Failed to update ToDoList'
+                'message' => 'Failed to update ToDoList, ' . $error->getMessage()
             ], 500);
         }
     }
@@ -103,12 +127,12 @@ class ToDoListController extends Controller
     public function destroy(string $id)
     {
         //
-        $todolist = ToDoList::find($id);
-
-        if (!$todolist) {
+        try {
+            $todolist = ToDoList::find($id);
+        } catch (\Throwable $th) {
             return response()->json([
                 'message' => 'ToDoList not found'
-            ], 404);
+            ], 500);
         }
 
         try {
@@ -118,8 +142,12 @@ class ToDoListController extends Controller
                 'message' => 'ToDoList deleted successfully'
             ], 200);
         } catch (Exception $error) {
+            Log::error('Failed to delete ToDoList, ' . $error->getMessage());
+
+            Logging::record(auth()->user()->id, request()->fullUrl(), 'Failed to delete ToDoList, ' . $error->getMessage(), request()->ip());
+
             return response()->json([
-                'message' => 'Failed to delete ToDoList'
+                'message' => 'Failed to delete ToDoList, ' . $error->getMessage()
             ], 500);
         }
     }
